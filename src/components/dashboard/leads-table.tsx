@@ -2,7 +2,8 @@
 
 import { Fragment, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ChevronDown, Sparkles } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { ClassificationBadge } from "@/components/dashboard/classification-badge";
 import { formatDateTime, formatRelative, truncate } from "@/lib/format";
@@ -40,6 +41,76 @@ function SortToggle({
         <ArrowUp className="h-3.5 w-3.5" />
       )}
     </Link>
+  );
+}
+
+function LeadExpandedDetail({ lead }: { lead: LeadListItem }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/classify`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.error ?? "Failed to generate draft");
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate draft");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const hasDraft = Boolean(lead.draft_text);
+  const canGenerate = lead.status !== "sent";
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
+          Raw message · {formatDateTime(lead.created_at)}
+        </p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+          {lead.raw_message}
+        </p>
+      </div>
+
+      {hasDraft && (
+        <div className="rounded-lg border border-brand/25 bg-brand-tint p-4">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
+            Draft reply · awaiting approval
+          </p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+            {lead.draft_text}
+          </p>
+        </div>
+      )}
+
+      {canGenerate && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleGenerate}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-dark disabled:opacity-50"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {pending
+              ? "Generating…"
+              : hasDraft
+                ? "Regenerate draft"
+                : "Generate draft with Claude"}
+          </button>
+          {error && <p className="text-xs text-danger">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -137,14 +208,7 @@ export function LeadsTable({
                   <tr className="bg-surface-muted/40">
                     <td />
                     <td colSpan={5} className="px-3 pb-4 pt-1">
-                      <div className="rounded-lg border border-border bg-surface p-4">
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
-                          Raw message · {formatDateTime(lead.created_at)}
-                        </p>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
-                          {lead.raw_message}
-                        </p>
-                      </div>
+                      <LeadExpandedDetail lead={lead} />
                     </td>
                   </tr>
                 )}
@@ -184,14 +248,7 @@ export function LeadsTable({
               </button>
               {expanded && (
                 <div className="px-4 pb-4">
-                  <div className="rounded-lg border border-border bg-surface-muted/60 p-3">
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
-                      Raw message · {formatDateTime(lead.created_at)}
-                    </p>
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
-                      {lead.raw_message}
-                    </p>
-                  </div>
+                  <LeadExpandedDetail lead={lead} />
                 </div>
               )}
             </li>

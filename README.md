@@ -109,28 +109,44 @@ later, in step 8). To create the first tenant:
   routes must call `requireBusinessContext()` from `src/lib/auth.ts` first.
 - No lead reply is ever sent without an explicit human approval step
   (enforced by the `leads.status` state machine: `new → drafted → approved
-  → sent`).
+  → sent`). The classification engine (step 3) only ever writes a
+  `draft_text` and sets status to `drafted` — nothing is sent automatically.
+- `ANTHROPIC_API_KEY` is read server-only in `src/lib/claude/client.ts`
+  (also `server-only`-guarded) and never reaches the browser.
 
 ## Project structure
 
 ```
 src/
   app/
-    login/            magic-link sign-in
-    auth/callback/     exchanges the magic-link code for a session
-    dashboard/         lead + booking overview (protected)
-  components/          shared UI (e.g. sign-out button)
+    login/                        magic-link sign-in
+    auth/callback/                 exchanges the magic-link code for a session
+    api/leads/[id]/classify/       POST: run Claude on one lead (auth required)
+    dashboard/
+      layout.tsx                   sidebar/nav shell, auth + onboarding gate
+      page.tsx                     overview (stats row, recent activity)
+      leads/                       full lead list — filter/sort/expand
+      bookings/                    booking list
+      settings/                    read-only business profile
+  components/dashboard/            badges, stat cards, nav, leads table, etc.
   lib/
     supabase/
-      client.ts        browser Supabase client (anon key)
-      server.ts        server Supabase client (anon key, RLS-scoped)
-      admin.ts         service-role client — server-only, bypasses RLS
-      middleware.ts     session refresh + route protection
-    auth.ts             requireBusinessContext() guard for API routes
-  types/database.ts     hand-written types mirroring the SQL schema
+      client.ts                   browser Supabase client (anon key)
+      server.ts                   server Supabase client (anon key, RLS-scoped)
+      admin.ts                    service-role client — server-only, bypasses RLS
+      middleware.ts               session refresh + route protection (used by proxy.ts)
+    claude/
+      client.ts                   server-only Anthropic client
+      classify-lead.ts            classification + drafting engine
+    data/leads.ts, data/bookings.ts   query helpers, always business_id-scoped
+    auth.ts                       requireBusinessContext() guard for API routes
+    dashboard-context.ts          same, for server-rendered dashboard pages
+  proxy.ts                        auth gate for every route (Next.js "proxy" convention)
+  types/database.ts               hand-written types mirroring the SQL schema
 supabase/
-  migrations/0001_init.sql   schema + Row Level Security
-  seed.example.sql            template for provisioning a business
+  migrations/0001_init.sql          schema + Row Level Security
+  migrations/0002_gym_test_business.sql   sample tenant profile for step 3 testing
+  seed.example.sql                   template for provisioning a business
 ```
 
 ## Build order
@@ -139,8 +155,11 @@ See the project brief for full acceptance criteria per step. Status:
 
 - [x] 1. Project foundation
 - [ ] 2. Connect one inbox
-- [ ] 3. Claude classification & drafting engine
-- [ ] 4. Dashboard (list/filter/edit — basic version shipped in step 1, needs filtering + inline edit)
+- [x] 3. Claude classification & drafting engine (manual "Generate draft"
+      button in the Leads page; not yet wired to run automatically on
+      insert — there's no insert path until step 2 exists)
+- [x] 4. Dashboard (list/filter/edit — inline edit of the draft itself is
+      still open, deferred until there's a dedicated lead-detail view)
 - [ ] 5. Approve-and-send flow
 - [ ] 6. Booking reminder engine
 - [ ] 7. End-to-end testing with real data
