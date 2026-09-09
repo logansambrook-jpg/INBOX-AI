@@ -1,26 +1,162 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------
+ * Design tokens
+ *
+ * Palette: warm paper canvas + deep forest-ink chrome, with a restrained
+ * gold accent for focus/active states. Classification colors (hot/warm/
+ * cold) intentionally read as a literal temperature scale; status colors
+ * read as a left-to-right workflow progression (new -> sent).
+ * ------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #faf7f1;
+  --surface: #ffffff;
+  --surface-muted: #f4efe4;
+  --border: #e6ddcc;
+  --border-strong: #d5c8ac;
+
+  --ink: #1c1a15;
+  --ink-muted: #6f6759;
+  --ink-faint: #a29b8a;
+
+  --brand: #1f5c4a;
+  --brand-dark: #143d31;
+  --brand-tint: #e3efe9;
+  --brand-fg: #f7fbf9;
+
+  --gold: #c8912f;
+  --gold-tint: #f7ecd7;
+
+  --hot: #bd4128;
+  --hot-tint: #fbeae4;
+  --warm: #ad7b16;
+  --warm-tint: #faf0da;
+  --cold: #3c6c8f;
+  --cold-tint: #e7eff4;
+
+  --status-new: #6f6759;
+  --status-new-tint: #f0ebe0;
+  --status-drafted: #40598f;
+  --status-drafted-tint: #e7ecf6;
+  --status-approved: #7a4f9e;
+  --status-approved-tint: #f0e8f6;
+  --status-sent: #1f5c4a;
+  --status-sent-tint: #e3efe9;
+
+  --danger: #b3261e;
+
+  --shadow-sm: 0 1px 2px rgba(28, 26, 21, 0.06);
+  --shadow-md: 0 6px 20px -6px rgba(28, 26, 21, 0.16);
+  --shadow-lg: 0 16px 40px -12px rgba(28, 26, 21, 0.28);
+
+  --sidebar-bg: #12211b;
+  --sidebar-fg: #f3f1e9;
+  --sidebar-fg-muted: #9db0a4;
+  --sidebar-border: rgba(243, 241, 233, 0.09);
+  --sidebar-active-bg: rgba(243, 241, 233, 0.08);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-fg: var(--brand-fg);
+
+  --color-gold: var(--gold);
+  --color-gold-tint: var(--gold-tint);
+
+  --color-hot: var(--hot);
+  --color-hot-tint: var(--hot-tint);
+  --color-warm: var(--warm);
+  --color-warm-tint: var(--warm-tint);
+  --color-cold: var(--cold);
+  --color-cold-tint: var(--cold-tint);
+
+  --color-status-new: var(--status-new);
+  --color-status-new-tint: var(--status-new-tint);
+  --color-status-drafted: var(--status-drafted);
+  --color-status-drafted-tint: var(--status-drafted-tint);
+  --color-status-approved: var(--status-approved);
+  --color-status-approved-tint: var(--status-approved-tint);
+  --color-status-sent: var(--status-sent);
+  --color-status-sent-tint: var(--status-sent-tint);
+
+  --color-danger: var(--danger);
+
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-active-bg: var(--sidebar-active-bg);
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-plex-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--gold-tint);
+  color: var(--ink);
+}
+
+/* Slim, quiet scrollbars that still work with default browser behavior */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.font-display {
+  font-family: var(--font-fraunces), ui-serif, serif;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
 }

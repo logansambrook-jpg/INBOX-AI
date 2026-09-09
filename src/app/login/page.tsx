@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Mail, MailCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/dashboard/logo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -33,51 +35,66 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">Inbox AI</h1>
-          <p className="text-sm text-neutral-500">
-            Sign in with a magic link — no password to manage.
-          </p>
+    <main className="flex flex-1 items-center justify-center bg-paper px-4 py-12">
+      <div className="w-full max-w-sm animate-fade-up">
+        <div className="mb-8 flex justify-center">
+          <Logo />
         </div>
 
-        {status === "sent" ? (
-          <p className="rounded-md border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
-            Check <span className="font-medium">{email}</span> for a sign-in
-            link.
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-md">
+          <h1 className="font-display text-xl font-semibold text-ink">
+            Welcome back
+          </h1>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            Sign in with a magic link — no password to manage.
           </p>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label htmlFor="email" className="text-sm font-medium">
-                Work email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-500"
-                placeholder="you@business.com"
-              />
+
+          {status === "sent" ? (
+            <div className="mt-6 flex items-start gap-3 rounded-lg border border-brand/20 bg-brand-tint px-4 py-4">
+              <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+              <p className="text-sm text-ink">
+                Check <span className="font-semibold">{email}</span> for a
+                sign-in link.
+              </p>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="email"
+                  className="text-sm font-medium text-ink"
+                >
+                  Work email
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="w-full rounded-lg border border-border bg-paper py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand focus:ring-2 focus:ring-brand/15"
+                    placeholder="you@business.com"
+                  />
+                </div>
+              </div>
 
-            {status === "error" && errorMessage && (
-              <p className="text-sm text-red-600">{errorMessage}</p>
-            )}
+              {status === "error" && errorMessage && (
+                <p className="text-sm text-danger">{errorMessage}</p>
+              )}
 
-            <button
-              type="submit"
-              disabled={status === "sending"}
-              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {status === "sending" ? "Sending link…" : "Send magic link"}
-            </button>
-          </form>
-        )}
+              <button
+                type="submit"
+                disabled={status === "sending"}
+                className="w-full rounded-lg bg-brand px-3 py-2.5 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-dark disabled:opacity-50"
+              >
+                {status === "sending" ? "Sending link…" : "Send magic link"}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </main>
   );

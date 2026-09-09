@@ -34,9 +34,19 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: do not run code between createServerClient and getUser().
   // A simple mistake here can lead to sessions being randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser();
+    user = fetchedUser;
+  } catch (error) {
+    // Supabase Auth unreachable (network blip, misconfigured env, etc).
+    // Fail closed on protected routes rather than throwing and taking the
+    // whole app down — every request would 500 otherwise, including the
+    // public login page.
+    console.error("Supabase auth check failed in proxy:", error);
+  }
 
   const isPublicPath = PUBLIC_PATHS.some((path) =>
     request.nextUrl.pathname.startsWith(path)

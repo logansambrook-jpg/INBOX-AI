@@ -1,161 +1,138 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { SignOutButton } from "@/components/sign-out-button";
+import { getDashboardContext } from "@/lib/dashboard-context";
+import { getLeadStatsThisWeek, getLeads, hasAnyLeads } from "@/lib/data/leads";
+import {
+  getBookingStatsNext7Days,
+  getUpcomingBookings,
+} from "@/lib/data/bookings";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { LeadsTable } from "@/components/dashboard/leads-table";
+import { ReminderBadge } from "@/components/dashboard/booking-badges";
+import { formatDateTime } from "@/lib/format";
+import { ArrowRight, Sparkles } from "lucide-react";
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default async function OverviewPage() {
+  const ctx = await getDashboardContext();
+  if (!ctx) redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase, businessId } = ctx;
 
-  // Every query below is explicitly scoped to business_id even though Row
-  // Level Security already enforces the same boundary at the database
-  // level — defense in depth, per the project's non-negotiable data
-  // isolation rule.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("business_id, full_name, role")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile) {
-    return (
-      <main className="mx-auto max-w-lg px-4 py-16 text-center">
-        <h1 className="text-xl font-semibold">Almost there</h1>
-        <p className="mt-2 text-sm text-neutral-500">
-          Your account isn&apos;t linked to a business yet. Ask an admin to
-          finish onboarding (see{" "}
-          <code className="rounded bg-neutral-100 px-1">
-            supabase/seed.example.sql
-          </code>
-          ), then refresh this page.
-        </p>
-        <div className="mt-6">
-          <SignOutButton />
-        </div>
-      </main>
-    );
-  }
-
-  const { data: business } = await supabase
-    .from("business_config")
-    .select("id, name")
-    .eq("id", profile.business_id)
-    .single();
-
-  const { data: leads } = await supabase
-    .from("leads")
-    .select("id, channel, status, classification, intent_summary, created_at")
-    .eq("business_id", profile.business_id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("id, client_name, appointment_time, reminder_sent, confirmed")
-    .eq("business_id", profile.business_id)
-    .order("appointment_time", { ascending: true })
-    .limit(50);
+  const [weekStats, bookingStats, recentLeads, upcomingBookings, anyLeads] =
+    await Promise.all([
+      getLeadStatsThisWeek(supabase, businessId),
+      getBookingStatsNext7Days(supabase, businessId),
+      getLeads(supabase, businessId, { sort: "desc", limit: 5 }),
+      getUpcomingBookings(supabase, businessId, 5),
+      hasAnyLeads(supabase, businessId),
+    ]);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">
-            {business?.name ?? "Dashboard"}
-          </h1>
-          <p className="text-sm text-neutral-500">
-            Signed in as {user.email} · {profile.role}
+    <div className="space-y-8 animate-fade-up">
+      <div>
+        <h1 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+          Overview
+        </h1>
+        <p className="mt-1 text-sm text-ink-muted">
+          What&apos;s come in and what&apos;s coming up.
+        </p>
+      </div>
+
+      {!anyLeads && (
+        <div className="flex items-start gap-3 rounded-xl border border-gold/40 bg-gold-tint px-5 py-4">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+          <p className="text-sm text-ink">
+            No leads yet. Once an inbox is connected, new messages will show
+            up here — classified and ready to draft — within a minute.
           </p>
         </div>
-        <SignOutButton />
-      </header>
+      )}
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Leads ({leads?.length ?? 0})
-        </h2>
-        {!leads || leads.length === 0 ? (
-          <p className="text-sm text-neutral-500">
-            No leads yet. Once an inbox is connected (step 2), new messages
-            will show up here automatically.
-          </p>
-        ) : (
-          <div className="overflow-hidden rounded-md border border-neutral-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-neutral-50 text-neutral-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Channel</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Classification</th>
-                  <th className="px-3 py-2 font-medium">Intent</th>
-                  <th className="px-3 py-2 font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {leads.map((lead) => (
-                  <tr key={lead.id}>
-                    <td className="px-3 py-2">{lead.channel}</td>
-                    <td className="px-3 py-2">{lead.status}</td>
-                    <td className="px-3 py-2">
-                      {lead.classification ?? "—"}
-                    </td>
-                    <td className="px-3 py-2">{lead.intent_summary ?? "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">
-                      {new Date(lead.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard
+          label="Leads this week"
+          value={weekStats.total}
+          accent="brand"
+          detail={<span>Last 7 days</span>}
+        />
+        <StatCard
+          label="Hot"
+          value={weekStats.hot}
+          accent="hot"
+          detail={<span className="text-hot">Needs a fast reply</span>}
+        />
+        <StatCard label="Warm" value={weekStats.warm} accent="warm" />
+        <StatCard label="Cold" value={weekStats.cold} accent="cold" />
+        <StatCard
+          label="Upcoming bookings"
+          value={bookingStats.total}
+          accent="gold"
+          detail={<span>Next 7 days · {bookingStats.confirmed} confirmed</span>}
+        />
+      </div>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold text-ink">
+            Recent leads
+          </h2>
+          <Link
+            href="/dashboard/leads"
+            className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-dark"
+          >
+            View all
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+        <LeadsTable
+          leads={recentLeads}
+          basePath="/dashboard/leads"
+          status="all"
+          classification="all"
+          sort="desc"
+        />
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Upcoming bookings ({bookings?.length ?? 0})
-        </h2>
-        {!bookings || bookings.length === 0 ? (
-          <p className="text-sm text-neutral-500">
-            No bookings yet. Once added, the daily reminder job (step 6) will
-            text or email clients before their appointment.
-          </p>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold text-ink">
+            Upcoming bookings
+          </h2>
+          <Link
+            href="/dashboard/bookings"
+            className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-dark"
+          >
+            View all
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+        {upcomingBookings.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border-strong bg-surface-muted/50 px-6 py-10 text-center text-sm text-ink-muted">
+            No bookings yet.
+          </div>
         ) : (
-          <div className="overflow-hidden rounded-md border border-neutral-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-neutral-50 text-neutral-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Client</th>
-                  <th className="px-3 py-2 font-medium">Appointment</th>
-                  <th className="px-3 py-2 font-medium">Reminder sent</th>
-                  <th className="px-3 py-2 font-medium">Confirmed</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {bookings.map((booking) => (
-                  <tr key={booking.id}>
-                    <td className="px-3 py-2">{booking.client_name}</td>
-                    <td className="px-3 py-2">
-                      {new Date(booking.appointment_time).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2">
-                      {booking.reminder_sent ? "Yes" : "No"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {booking.confirmed ? "Yes" : "No"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+            <ul className="divide-y divide-border">
+              {upcomingBookings.map((booking) => (
+                <li
+                  key={booking.id}
+                  className="flex items-center justify-between gap-4 px-4 py-3.5 sm:px-5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">
+                      {booking.client_name}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      {formatDateTime(booking.appointment_time)}
+                    </p>
+                  </div>
+                  <ReminderBadge sent={booking.reminder_sent} />
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }
