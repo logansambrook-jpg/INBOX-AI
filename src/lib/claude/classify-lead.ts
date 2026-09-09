@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { createAnthropicClient } from "@/lib/claude/client";
+import { sanitizeForPrompt } from "@/lib/text";
 
 const MODEL = "claude-opus-5";
 
@@ -21,17 +22,31 @@ export type BusinessProfile = {
   faqs: string | null;
 };
 
+/**
+ * Every field pulled from business_config (owner-editable, often
+ * copy-pasted from Word/Docs/Notion) and the lead's raw_message is run
+ * through sanitizeForPrompt() before it touches the prompt. Claude doesn't
+ * need a literal curly quote or bullet to write a good reply, and this
+ * closes off the "smart typography breaks something ASCII-only downstream"
+ * bug class at the source rather than trying to guess where else it might
+ * resurface.
+ */
 function buildSystemPrompt(business: BusinessProfile): string {
-  return `You are the lead-triage assistant for ${business.name}, a small service business. A human always reviews and approves your draft before anything is sent — you are never sending anything directly — so write the reply ready to send as-is, with no hedging or disclaimers about being an AI.
+  const name = sanitizeForPrompt(business.name);
+  const toneNotes = sanitizeForPrompt(business.tone_notes || "Friendly and professional.");
+  const serviceMenu = sanitizeForPrompt(business.service_menu || "Not specified.");
+  const faqs = sanitizeForPrompt(business.faqs || "Not specified.");
+
+  return `You are the lead-triage assistant for ${name}, a small service business. A human always reviews and approves your draft before anything is sent -- you are never sending anything directly -- so write the reply ready to send as-is, with no hedging or disclaimers about being an AI.
 
 BUSINESS TONE
-${business.tone_notes || "Friendly and professional."}
+${toneNotes}
 
 SERVICES OFFERED
-${business.service_menu || "Not specified."}
+${serviceMenu}
 
-FREQUENTLY ASKED QUESTIONS (the only source of truth for specifics — never invent a price, hour, or policy that isn't listed here)
-${business.faqs || "Not specified."}
+FREQUENTLY ASKED QUESTIONS (the only source of truth for specifics -- never invent a price, hour, or policy that isn't listed here)
+${faqs}
 
 TASK
 Given one inbound lead message, do three things:
@@ -41,9 +56,9 @@ Given one inbound lead message, do three things:
    - warm: interested and asking questions first (pricing, details, comparing options) before committing
    - cold: vague, low-intent, just browsing, or too little information to tell what they want
 
-2. Write intent_summary: a short phrase (under 12 words) capturing what they actually want — not a restatement of their message.
+2. Write intent_summary: a short phrase (under 12 words) capturing what they actually want -- not a restatement of their message.
 
-3. Write draft_reply: a reply in the business's tone that directly answers their specific question, using real specifics from the FAQs/service menu above where relevant (for example, mention the free trial if they're price-shopping or on the fence). Match reply length to the message — a one-line reply for a one-line question, fuller for a message with multiple questions. Sign off naturally for the business; never sign with a generic "Customer Support" or similar.`;
+3. Write draft_reply: a reply in the business's tone that directly answers their specific question, using real specifics from the FAQs/service menu above where relevant (for example, mention the free trial if they're price-shopping or on the fence). Match reply length to the message -- a one-line reply for a one-line question, fuller for a message with multiple questions. Sign off naturally for the business; never sign with a generic "Customer Support" or similar.`;
 }
 
 export type ClassifyLeadResult =
@@ -52,7 +67,7 @@ export type ClassifyLeadResult =
 
 /**
  * Classifies one inbound lead and drafts a reply, using the business's own
- * tone/services/FAQs as context. This never sends anything — the caller
+ * tone/services/FAQs as context. This never sends anything -- the caller
  * writes the result back as a draft awaiting human approval, per the
  * project's no-auto-send rule. The Anthropic SDK already retries
  * transient failures (429/5xx/connection errors) internally before
@@ -73,7 +88,7 @@ export async function classifyLead(
         format: zodOutputFormat(LeadAnalysisSchema),
       },
       system: buildSystemPrompt(business),
-      messages: [{ role: "user", content: rawMessage }],
+      messages: [{ role: "user", content: sanitizeForPrompt(rawMessage) }],
     });
 
     if (!response.parsed_output) {
@@ -89,7 +104,7 @@ export async function classifyLead(
     if (error instanceof Anthropic.RateLimitError) {
       return {
         ok: false,
-        error: "Rate limited by the Claude API — try again shortly.",
+        error: "Rate limited by the Claude API -- try again shortly.",
         retryable: true,
       };
     }
