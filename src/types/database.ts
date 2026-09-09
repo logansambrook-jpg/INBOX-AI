@@ -114,6 +114,7 @@ export interface Database {
           classification: LeadClassification | null;
           intent_summary: string | null;
           draft_text: string | null;
+          contact: string | null;
           sent_at: string | null;
           created_at: string;
         };
@@ -126,6 +127,7 @@ export interface Database {
           classification?: LeadClassification | null;
           intent_summary?: string | null;
           draft_text?: string | null;
+          contact?: string | null;
           sent_at?: string | null;
           created_at?: string;
         };

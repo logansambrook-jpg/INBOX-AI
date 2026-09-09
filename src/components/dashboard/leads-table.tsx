@@ -1,9 +1,18 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronDown, Sparkles } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  ChevronDown,
+  Pencil,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { ClassificationBadge } from "@/components/dashboard/classification-badge";
 import { formatDateTime, formatRelative, truncate } from "@/lib/format";
@@ -46,12 +55,24 @@ function SortToggle({
 
 function LeadExpandedDetail({ lead }: { lead: LeadListItem }) {
   const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The same lead renders in both the desktop table and the mobile card
+  // list at once (one hidden via CSS) -- useId() keeps the contact
+  // input's id/label pairing unique per instance instead of colliding on
+  // a shared `contact-${lead.id}`.
+  const contactInputId = useId();
+
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState(lead.draft_text ?? "");
+  const [contactValue, setContactValue] = useState(lead.contact ?? "");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   async function handleGenerate() {
-    setPending(true);
-    setError(null);
+    setGenerating(true);
+    setGenerateError(null);
     try {
       const res = await fetch(`/api/leads/${lead.id}/classify`, {
         method: "POST",
@@ -62,14 +83,42 @@ function LeadExpandedDetail({ lead }: { lead: LeadListItem }) {
       }
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate draft");
+      setGenerateError(
+        err instanceof Error ? err.message : "Failed to generate draft"
+      );
     } finally {
-      setPending(false);
+      setGenerating(false);
+    }
+  }
+
+  async function handleSend() {
+    setSending(true);
+    setSendError(null);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          finalText: draftValue,
+          contact: contactValue,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.error ?? "Failed to send");
+      }
+      router.refresh();
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSending(false);
     }
   }
 
   const hasDraft = Boolean(lead.draft_text);
-  const canGenerate = lead.status !== "sent";
+  const isSent = lead.status === "sent";
+  const canSend =
+    !sending && draftValue.trim().length > 0 && contactValue.trim().length > 0;
 
   return (
     <div className="space-y-3">
@@ -82,32 +131,128 @@ function LeadExpandedDetail({ lead }: { lead: LeadListItem }) {
         </p>
       </div>
 
-      {hasDraft && (
+      {isSent ? (
         <div className="rounded-lg border border-brand/25 bg-brand-tint p-4">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
-            Draft reply · awaiting approval
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-brand">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Sent{lead.sent_at ? ` · ${formatDateTime(lead.sent_at)}` : ""}
+            {lead.contact ? ` · to ${lead.contact}` : ""}
           </p>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
             {lead.draft_text}
           </p>
         </div>
+      ) : (
+        hasDraft && (
+          <div className="rounded-lg border border-brand/25 bg-brand-tint p-4">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-brand">
+                Draft reply · awaiting approval
+              </p>
+              {!editing && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-dark"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {editing ? (
+              <>
+                <textarea
+                  value={draftValue}
+                  onChange={(event) => setDraftValue(event.target.value)}
+                  rows={6}
+                  className="w-full rounded-md border border-brand/30 bg-surface p-3 text-sm leading-relaxed text-ink outline-none focus:border-brand"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    setDraftValue(lead.draft_text ?? "");
+                    setEditing(false);
+                  }}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-ink"
+                >
+                  <X className="h-3 w-3" />
+                  Cancel edit
+                </button>
+              </>
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                {draftValue}
+              </p>
+            )}
+          </div>
+        )
       )}
 
-      {canGenerate && (
+      {!isSent && hasDraft && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface-muted/60 p-4">
+          {lead.contact ? (
+            <p className="text-xs text-ink-muted">
+              Sending to <span className="font-medium text-ink">{lead.contact}</span>
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <label
+                htmlFor={contactInputId}
+                className="text-xs font-medium text-ink"
+              >
+                Send to (email) — no contact on file for this lead yet
+              </label>
+              <input
+                id={contactInputId}
+                type="email"
+                required
+                value={contactValue}
+                onChange={(event) => setContactValue(event.target.value)}
+                placeholder="client@example.com"
+                className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-dark disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {sending ? "Sending…" : "Approve & Send"}
+            </button>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {generating ? "Generating…" : "Regenerate draft"}
+            </button>
+            {sendError && <p className="text-xs text-danger">{sendError}</p>}
+            {generateError && (
+              <p className="text-xs text-danger">{generateError}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isSent && !hasDraft && (
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleGenerate}
-            disabled={pending}
+            disabled={generating}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg transition-colors hover:bg-brand-dark disabled:opacity-50"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            {pending
-              ? "Generating…"
-              : hasDraft
-                ? "Regenerate draft"
-                : "Generate draft with Claude"}
+            {generating ? "Generating…" : "Generate draft with Claude"}
           </button>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {generateError && (
+            <p className="text-xs text-danger">{generateError}</p>
+          )}
         </div>
       )}
     </div>
@@ -208,7 +353,7 @@ export function LeadsTable({
                   <tr className="bg-surface-muted/40">
                     <td />
                     <td colSpan={5} className="px-3 pb-4 pt-1">
-                      <LeadExpandedDetail lead={lead} />
+                      <LeadExpandedDetail key={`${lead.id}-${lead.draft_text}-${lead.contact}`} lead={lead} />
                     </td>
                   </tr>
                 )}
@@ -248,7 +393,7 @@ export function LeadsTable({
               </button>
               {expanded && (
                 <div className="px-4 pb-4">
-                  <LeadExpandedDetail lead={lead} />
+                  <LeadExpandedDetail key={`${lead.id}-${lead.draft_text}-${lead.contact}`} lead={lead} />
                 </div>
               )}
             </li>

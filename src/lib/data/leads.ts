@@ -20,6 +20,7 @@ export type LeadListItem = Pick<
   | "classification"
   | "intent_summary"
   | "draft_text"
+  | "contact"
   | "sent_at"
   | "created_at"
 >;
@@ -60,7 +61,7 @@ export async function getLeads(
   let query = supabase
     .from("leads")
     .select(
-      "id, raw_message, channel, status, classification, intent_summary, draft_text, sent_at, created_at"
+      "id, raw_message, channel, status, classification, intent_summary, draft_text, contact, sent_at, created_at"
     )
     .eq("business_id", businessId);
 

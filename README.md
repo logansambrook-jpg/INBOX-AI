@@ -111,8 +111,16 @@ later, in step 8). To create the first tenant:
   (enforced by the `leads.status` state machine: `new → drafted → approved
   → sent`). The classification engine (step 3) only ever writes a
   `draft_text` and sets status to `drafted` — nothing is sent automatically.
-- `ANTHROPIC_API_KEY` is read server-only in `src/lib/claude/client.ts`
-  (also `server-only`-guarded) and never reaches the browser.
+  The only thing that ever sends anything is the owner clicking "Approve &
+  Send" (step 5), which sends exactly the text shown on screen at that
+  moment (edited or not) — never the original AI draft if it was changed.
+- `ANTHROPIC_API_KEY` and `RESEND_API_KEY` are read server-only
+  (`src/lib/claude/client.ts`, `src/lib/email/resend-client.ts`, both
+  `server-only`-guarded) and never reach the browser.
+- Every send is a permanent audit record: `leads.status`, `sent_at`, and
+  `draft_text` (overwritten with the exact final text at send time) are
+  only ever written together, after the email provider confirms success —
+  a failed send updates nothing, so the row never lies about what went out.
 
 ## Project structure
 
@@ -122,6 +130,7 @@ src/
     login/                        magic-link sign-in
     auth/callback/                 exchanges the magic-link code for a session
     api/leads/[id]/classify/       POST: run Claude on one lead (auth required)
+    api/leads/[id]/send/           POST: approve-and-send (auth required)
     dashboard/
       layout.tsx                   sidebar/nav shell, auth + onboarding gate
       page.tsx                     overview (stats row, recent activity)
@@ -138,6 +147,9 @@ src/
     claude/
       client.ts                   server-only Anthropic client
       classify-lead.ts            classification + drafting engine
+    email/
+      resend-client.ts            server-only Resend client
+      send-lead-reply.ts          approve-and-send's actual send step
     data/leads.ts, data/bookings.ts   query helpers, always business_id-scoped
     auth.ts                       requireBusinessContext() guard for API routes
     dashboard-context.ts          same, for server-rendered dashboard pages
@@ -146,6 +158,8 @@ src/
 supabase/
   migrations/0001_init.sql          schema + Row Level Security
   migrations/0002_gym_test_business.sql   sample tenant profile for step 3 testing
+  migrations/0003_ascii_safe_business_text.sql   re-applies 0002 in plain ASCII
+  migrations/0004_leads_contact.sql   adds leads.contact (who to send the reply to)
   seed.example.sql                   template for provisioning a business
 ```
 
@@ -158,9 +172,10 @@ See the project brief for full acceptance criteria per step. Status:
 - [x] 3. Claude classification & drafting engine (manual "Generate draft"
       button in the Leads page; not yet wired to run automatically on
       insert — there's no insert path until step 2 exists)
-- [x] 4. Dashboard (list/filter/edit — inline edit of the draft itself is
-      still open, deferred until there's a dedicated lead-detail view)
-- [ ] 5. Approve-and-send flow
+- [x] 4. Dashboard (list/filter/edit — inline edit of the draft ships as
+      part of step 5's approve-and-send flow, in the same expanded row)
+- [x] 5. Approve-and-send flow (sends via Resend for now — a real inbox
+      send in step 2 only needs to replace `sendLeadReply()`'s internals)
 - [ ] 6. Booking reminder engine
 - [ ] 7. End-to-end testing with real data
 - [ ] 8. Streamline onboarding for the next business
